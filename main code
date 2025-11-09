@@ -1,0 +1,67 @@
+!pip install opencv-python
+import cv2, numpy as np, os
+from google.colab import files, patches
+
+uploaded = files.upload()
+video_path = list(uploaded.keys())[0]
+print("🎬 Using video file:", video_path)
+
+def detect_shapes(frame, prev_gray=None):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (7,7), 1)
+    edges = cv2.Canny(blur, 50, 150)
+
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for c in contours:
+        if cv2.contourArea(c) < 400: continue
+        approx = cv2.approxPolyDP(c, 0.02 * cv2.arcLength(c, True), True)
+        x,y,w,h = cv2.boundingRect(approx)
+        if len(approx)==3:  shape, color = "Triangle", (0,255,0)
+        elif len(approx)==4: shape, color = "Rectangle", (255,0,0)
+        elif len(approx)>6: shape, color = "Circle", (0,255,255)
+        else: shape, color = "Polygon", (255,255,0)
+        cv2.drawContours(frame,[approx],0,color,2)
+        cv2.putText(frame,shape,(max(x,0),max(y-5,15)),
+                    cv2.FONT_HERSHEY_SIMPLEX,0.6,color,2)
+
+    circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, 1, 60,
+                               param1=80, param2=40, minRadius=10, maxRadius=100)
+    if circles is not None:
+        circles = np.uint16(np.around(circles))
+        for i in circles[0,:]:
+            cv2.circle(frame,(i[0],i[1]),i[2],(0,0,255),2)
+            cv2.putText(frame,"Hough Circle",(i[0]-30,max(i[1]-30,15)),
+                        cv2.FONT_HERSHEY_SIMPLEX,0.5,(0,0,255),2)
+
+    if prev_gray is not None:
+        diff = cv2.absdiff(prev_gray, gray)
+        _, mask = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        motion_contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for mc in motion_contours:
+            if cv2.contourArea(mc) > 1500:
+                x,y,w,h = cv2.boundingRect(mc)
+                cv2.rectangle(frame,(x,y),(x+w,y+h),(0,0,255),2)
+                cv2.putText(frame,"Motion",(x,y-5),
+                            cv2.FONT_HERSHEY_SIMPLEX,0.5,(0,0,255),2)
+    return frame, gray
+
+cap = cv2.VideoCapture(video_path)
+if not cap.isOpened():
+    print("❌ Could not open video file.")
+else:
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    interval = max(total_frames // 6, 1)
+    prev_gray = None
+    for i in range(6):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, i * interval)
+        ret, frame = cap.read()
+        if not ret: break
+        frame = cv2.resize(frame,(640,360))
+        processed, prev_gray = detect_shapes(frame, prev_gray)
+        print(f"🖼️ Frame {i+1}/6 (#{i*interval})")
+        patches.cv2_imshow(processed)
+        cv2.imwrite(f"/content/frame_{i+1}.jpg", processed)
+    cap.release()
+    print("✅ Completed 6 frames.")
