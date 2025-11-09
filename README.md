@@ -39,11 +39,6 @@ The system processes the video and annotates the frames with its findings.
 * **Hough Circles** are marked with a red circle.
 * **Motion** is captured by a red bounding box.
 
-*(Insert your output screenshots here)*
-
-![Frame 1](frame_1.jpg)
-![Frame 2](frame_2.jpg)
-![Frame 3](frame_3.jpg)
 
 ## 🔧 How to Run
 
